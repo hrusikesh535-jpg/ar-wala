@@ -3,8 +3,120 @@
     <head>
         <script src="https://aframe.io/releases/1.0.4/aframe.min.js"></script>
         <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-        <script src="https://raw.githack.com/AR-js-org/studio-backend/master/src/modules/marker/tools/gesture-detector.js"></script>
-        <script src="https://raw.githack.com/AR-js-org/studio-backend/master/src/modules/marker/tools/gesture-handler.js"></script>
+
+        <script>
+            /**
+             * float-interact
+             * - Makes the entity hover (bob up/down) and auto-spin around Y.
+             * - One-finger / mouse drag: manually rotate (auto-spin pauses while dragging).
+             * - Two-finger pinch: scale up/down.
+             * Since this AR scene only has one interactive object, drag/pinch
+             * are listened for globally rather than per-object raycasting.
+             */
+            AFRAME.registerComponent('float-interact', {
+                schema: {
+                    hoverHeight: { type: 'number', default: 0.15 },
+                    hoverSpeed: { type: 'number', default: 2.2 },   // seconds per bob cycle
+                    rotateSpeed: { type: 'number', default: 25 },   // deg/sec auto-spin
+                    minScale: { type: 'number', default: 0.4 },
+                    maxScale: { type: 'number', default: 2.5 }
+                },
+
+                init: function () {
+                    var obj = this.el.object3D;
+                    this.baseY = obj.position.y;
+                    this.currentYRotRad = obj.rotation.y;
+                    this.baseScale = obj.scale.x;
+                    this.scaleFactor = 1;
+
+                    this.dragging = false;
+                    this.lastX = 0;
+                    this.pinching = false;
+                    this.lastPinchDist = 0;
+
+                    this.onDown = this.onDown.bind(this);
+                    this.onMove = this.onMove.bind(this);
+                    this.onUp = this.onUp.bind(this);
+
+                    window.addEventListener('touchstart', this.onDown, { passive: true });
+                    window.addEventListener('touchmove', this.onMove, { passive: true });
+                    window.addEventListener('touchend', this.onUp);
+                    window.addEventListener('mousedown', this.onDown);
+                    window.addEventListener('mousemove', this.onMove);
+                    window.addEventListener('mouseup', this.onUp);
+                },
+
+                remove: function () {
+                    window.removeEventListener('touchstart', this.onDown);
+                    window.removeEventListener('touchmove', this.onMove);
+                    window.removeEventListener('touchend', this.onUp);
+                    window.removeEventListener('mousedown', this.onDown);
+                    window.removeEventListener('mousemove', this.onMove);
+                    window.removeEventListener('mouseup', this.onUp);
+                },
+
+                dist: function (t0, t1) {
+                    var dx = t0.clientX - t1.clientX;
+                    var dy = t0.clientY - t1.clientY;
+                    return Math.sqrt(dx * dx + dy * dy);
+                },
+
+                onDown: function (evt) {
+                    if (evt.touches && evt.touches.length === 2) {
+                        this.pinching = true;
+                        this.dragging = false;
+                        this.lastPinchDist = this.dist(evt.touches[0], evt.touches[1]);
+                    } else {
+                        this.dragging = true;
+                        this.pinching = false;
+                        var x = evt.touches ? evt.touches[0].clientX : evt.clientX;
+                        this.lastX = x;
+                    }
+                },
+
+                onMove: function (evt) {
+                    if (this.pinching && evt.touches && evt.touches.length === 2) {
+                        var d = this.dist(evt.touches[0], evt.touches[1]);
+                        var delta = (d - this.lastPinchDist) * 0.01;
+                        this.scaleFactor = Math.min(
+                            this.data.maxScale,
+                            Math.max(this.data.minScale, this.scaleFactor + delta)
+                        );
+                        var s = this.baseScale * this.scaleFactor;
+                        this.el.object3D.scale.set(s, s, s);
+                        this.lastPinchDist = d;
+                        return;
+                    }
+                    if (this.dragging) {
+                        var x = evt.touches ? evt.touches[0].clientX : evt.clientX;
+                        var deltaX = x - this.lastX;
+                        this.currentYRotRad += deltaX * 0.01;
+                        this.el.object3D.rotation.y = this.currentYRotRad;
+                        this.lastX = x;
+                    }
+                },
+
+                onUp: function () {
+                    this.dragging = false;
+                    this.pinching = false;
+                },
+
+                tick: function (time, deltaMs) {
+                    var dt = deltaMs / 1000;
+                    var t = time / 1000;
+
+                    // hover bob, always runs
+                    var y = this.baseY + Math.sin(t * (2 * Math.PI / this.data.hoverSpeed)) * this.data.hoverHeight;
+                    this.el.object3D.position.y = y;
+
+                    // auto-spin only when not being dragged or pinched
+                    if (!this.dragging && !this.pinching) {
+                        this.currentYRotRad += THREE.MathUtils.degToRad(this.data.rotateSpeed * dt);
+                        this.el.object3D.rotation.y = this.currentYRotRad;
+                    }
+                }
+            });
+        </script>
     </head>
 
     <body style="margin: 0; overflow: hidden;">
@@ -14,24 +126,22 @@
             arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;"
             id="scene"
             embedded
-            gesture-detector
         >
             <a-marker
                 id="animated-marker"
                 type="pattern"
                 preset="custom"
                 url="assets/marker.patt"
-                raycaster="objects: .clickable"
                 emitevents="true"
-                cursor="fuse: false; rayOrigin: mouse;"
                 id="markerA"
             >
                 <a-image
                     src="assets/asset.gif"
+                    position="0 0.3 0"
+                    rotation="-10 0 0"
                     scale="1 1 1"
                     class="clickable"
-                    rotation="-90 0 0"
-                    gesture-handler
+                    float-interact
                 ></a-image>
             </a-marker>
 
