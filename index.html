@@ -1,158 +1,13 @@
 <!doctype html>
 <html>
     <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
         <script src="https://aframe.io/releases/1.0.4/aframe.min.js"></script>
         <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
         <script src="https://raw.githack.com/AR-js-org/studio-backend/master/src/modules/marker/tools/gesture-detector.js"></script>
         <script src="https://raw.githack.com/AR-js-org/studio-backend/master/src/modules/marker/tools/gesture-handler.js"></script>
-
-        <style>
-            html, body { margin: 0; overflow: hidden; height: 100%; }
-
-            #overlay {
-                position: fixed;
-                top: 0; left: 0; right: 0;
-                display: flex;
-                justify-content: center;
-                pointer-events: none;
-                z-index: 999;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            }
-            #hint {
-                margin-top: 18px;
-                padding: 8px 16px;
-                background: rgba(0,0,0,0.55);
-                color: #fff;
-                border-radius: 20px;
-                font-size: 13px;
-                letter-spacing: 0.3px;
-                transition: opacity 0.4s ease;
-            }
-            #hint.hidden { opacity: 0; }
-        </style>
-
-        <script>
-            // ---- Idle hover: gentle float + slow spin, gives a flat sprite real depth cues ----
-            AFRAME.registerComponent('hover-effect', {
-                schema: {
-                    amplitude: { default: 0.12 },
-                    speed: { default: 1.4 },
-                    spin: { default: 0.25 }, // radians/sec
-                    shadow: { type: 'selector' }
-                },
-                init: function () {
-                    this.t = Math.random() * 10;
-                    this.baseY = this.el.object3D.position.y;
-                },
-                tick: function (time, delta) {
-                    const dt = delta / 1000;
-                    this.t += dt;
-
-                    const lift = (Math.sin(this.t * this.data.speed) + 1) / 2; // 0..1
-                    const y = this.baseY + lift * this.data.amplitude;
-                    this.el.object3D.position.y = y;
-                    this.el.object3D.rotation.z = Math.sin(this.t * this.data.speed) * 0.05;
-
-                    if (!this.el.isSpinPaused) {
-                        this.el.object3D.rotation.y += this.data.spin * dt;
-                    }
-
-                    // Contact shadow shrinks + fades as the character "lifts" off the marker
-                    if (this.data.shadow) {
-                        const s = 1 - lift * 0.4;
-                        this.data.shadow.object3D.scale.set(s, s, s);
-                        const mat = this.data.shadow.getAttribute('material') || {};
-                        this.data.shadow.setAttribute('material', 'opacity', 0.35 - lift * 0.18);
-                    }
-                }
-            });
-
-            // ---- Tap / click: squash-stretch jump + confetti burst ----
-            AFRAME.registerComponent('tap-interact', {
-                init: function () {
-                    this.busy = false;
-                    this.el.addEventListener('click', () => this.onTap());
-                },
-                onTap: function () {
-                    if (this.busy) return;
-                    this.busy = true;
-
-                    const el = this.el;
-                    el.isSpinPaused = true;
-                    el.removeAttribute('animation__squash');
-                    el.removeAttribute('animation__stretch');
-
-                    el.setAttribute('animation__squash', {
-                        property: 'scale',
-                        from: '1 1 1',
-                        to: '1.35 0.65 1.35',
-                        dur: 140,
-                        easing: 'easeOutQuad'
-                    });
-
-                    setTimeout(() => {
-                        el.setAttribute('animation__stretch', {
-                            property: 'scale',
-                            from: '1.35 0.65 1.35',
-                            to: '1 1 1',
-                            dur: 420,
-                            easing: 'easeOutElastic'
-                        });
-                        el.isSpinPaused = false;
-                        this.busy = false;
-                    }, 140);
-
-                    spawnBurst(el.parentEl || el.sceneEl);
-                }
-            });
-
-            function spawnBurst(parent) {
-                if (!parent) return;
-                const colors = ['#ff6b6b', '#ffd93d', '#6bcBff', '#8affc1', '#c792ff', '#ffffff'];
-                const count = 10;
-
-                for (let i = 0; i < count; i++) {
-                    const angle = (i / count) * Math.PI * 2 + Math.random() * 0.4;
-                    const dist = 0.35 + Math.random() * 0.35;
-                    const dx = Math.cos(angle) * dist;
-                    const dz = Math.sin(angle) * dist;
-
-                    const p = document.createElement('a-circle');
-                    p.setAttribute('radius', 0.035 + Math.random() * 0.03);
-                    p.setAttribute('color', colors[Math.floor(Math.random() * colors.length)]);
-                    p.setAttribute('rotation', '-90 0 0');
-                    p.setAttribute('position', '0 0.05 0');
-                    p.setAttribute('material', 'shader: flat; transparent: true; opacity: 1');
-                    p.setAttribute('animation__move', {
-                        property: 'position',
-                        to: `${dx} ${0.3 + Math.random() * 0.25} ${dz}`,
-                        dur: 550,
-                        easing: 'easeOutQuad'
-                    });
-                    p.setAttribute('animation__fade', {
-                        property: 'material.opacity',
-                        from: 1,
-                        to: 0,
-                        dur: 550,
-                        easing: 'linear'
-                    });
-                    p.setAttribute('animation__spin', {
-                        property: 'rotation',
-                        to: `-90 ${Math.random() * 360} 0`,
-                        dur: 550
-                    });
-
-                    parent.appendChild(p);
-                    setTimeout(() => p.remove(), 600);
-                }
-            }
-        </script>
     </head>
 
-    <body>
-        <div id="overlay"><div id="hint">Point your camera at the marker</div></div>
-
+    <body style="margin: 0; overflow: hidden;">
         <a-scene
             vr-mode-ui="enabled: false;"
             loading-screen="enabled: false;"
@@ -169,53 +24,18 @@
                 raycaster="objects: .clickable"
                 emitevents="true"
                 cursor="fuse: false; rayOrigin: mouse;"
+                id="markerA"
             >
-                <!-- Contact shadow: grounds the character and sells the floating effect -->
-                <a-circle
-                    id="dropShadow"
-                    radius="0.55"
-                    color="#000"
-                    material="shader: flat; transparent: true; opacity: 0.3"
-                    rotation="-90 0 0"
-                    position="0 0.001 0"
-                ></a-circle>
-
                 <a-image
                     src="assets/asset.gif"
                     scale="1 1 1"
                     class="clickable"
                     rotation="-90 0 0"
                     gesture-handler
-                    hover-effect="shadow: #dropShadow"
-                    tap-interact
                 ></a-image>
             </a-marker>
 
             <a-entity camera></a-entity>
         </a-scene>
-
-        <script>
-            const scene = document.querySelector('#scene');
-            const marker = document.querySelector('#animated-marker');
-            const hint = document.querySelector('#hint');
-
-            marker.addEventListener('markerFound', () => {
-                hint.textContent = 'Tap the monster!';
-                const img = marker.querySelector('a-image');
-                img.setAttribute('scale', '0.001 0.001 0.001');
-                img.setAttribute('animation__enter', {
-                    property: 'scale',
-                    to: '1 1 1',
-                    dur: 500,
-                    easing: 'easeOutElastic'
-                });
-                setTimeout(() => hint.classList.add('hidden'), 2200);
-            });
-
-            marker.addEventListener('markerLost', () => {
-                hint.classList.remove('hidden');
-                hint.textContent = 'Point your camera at the marker';
-            });
-        </script>
     </body>
 </html>
